@@ -1,5 +1,6 @@
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+from app.config import settings
 
 app = FastAPI(
     title="ICU Monitor API",
@@ -13,4 +14,8 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "environment": settings.app_env,
+        "debug": settings.debug,
+    }
