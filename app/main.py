@@ -17,7 +17,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     await engine.dispose()
-    print("Database disconnected")
+    print("❌ Database disconnected")
 
 @app.get("/")
 async def root():
