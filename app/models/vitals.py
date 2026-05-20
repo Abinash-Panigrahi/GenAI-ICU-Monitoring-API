@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON
+from sqlalchemy import Column, String, Integer, DateTime, JSON, BigInteger
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -12,3 +12,4 @@ class Vitals(Base):
     alarms = Column(JSON, nullable=True)
     window_start = Column(DateTime(timezone=True), nullable=False)
     window_end = Column(DateTime(timezone=True), nullable=False)
+    observation_time = Column(BigInteger, nullable=True)
