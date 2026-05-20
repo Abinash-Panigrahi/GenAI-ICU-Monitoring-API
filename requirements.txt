@@ -4,3 +4,5 @@ pydantic-settings
 sqlalchemy[asyncio]
 asyncpg
 alembic
+httpx
+google-genai
