@@ -35,7 +35,10 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         patient_mrn=patient_mrn,
         vital_signs=vital_signs,
         alarms=alarms,
-        anomalies=anomalies
+        anomalies=anomalies,
+        combination_alerts=anomalies["combination_alerts"],
+        risk_score=anomalies["risk_score"],
+        risk_level=anomalies["risk_level"]
     )
 
     # step 5 — save report to database
@@ -45,6 +48,9 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         window_end=window_end,
         anomalies_found=anomalies["anomalies"],
         severity_level=anomalies["severity"],
+        risk_score=anomalies["risk_score"],
+        risk_level=anomalies["risk_level"],
+        combination_alerts=anomalies["combination_alerts"],
         summary=llm_output["summary"],
         concerns=llm_output["concerns"],
         trend_assessment=llm_output["trend_assessment"],

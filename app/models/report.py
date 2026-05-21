@@ -14,6 +14,9 @@ class Report(Base):
     # rules engine output
     anomalies_found = Column(JSON, nullable=True)
     severity_level = Column(String, nullable=True)
+    risk_score = Column(Float, nullable=True)
+    risk_level = Column(String, nullable=True)
+    combination_alerts = Column(JSON, nullable=True)
     
     # llm output
     summary = Column(Text, nullable=True)

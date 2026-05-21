@@ -1,4 +1,5 @@
 from google import genai
+from google.genai import types
 import json
 import time
 from app.config import settings
@@ -8,7 +9,7 @@ client = genai.Client(api_key=settings.llm_api_key)
 PROMPT_VERSION = "v1.0"
 MODEL = "gemini-2.5-flash"
 
-def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: list) -> str:
+def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: list, combination_alerts: list, risk_score: int, risk_level: str) -> str:
 
     vitals_text = ""
     for vital in vital_signs:
@@ -25,12 +26,9 @@ def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: l
             trend = vital.get("trend")
             disconnected = vital.get("disconnected_readings", 0)
             reconnected_at = vital.get("reconnected_at")
-
             line = f"- {param}: first={first}{unit}, latest={latest}{unit}, avg={avg}{unit}, trend={trend}"
-
             if disconnected > 0 and reconnected_at:
                 line += f" (was disconnected, reconnected at {reconnected_at})"
-
             vitals_text += line + "\n"
 
     alarms_text = ""
@@ -42,59 +40,81 @@ def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: l
 
     anomalies_text = ""
     if anomalies:
-        for anomaly in anomalies:
+        for anomaly in anomalies[:15]:
             anomalies_text += f"- {anomaly.get('parameter')}: {anomaly.get('issue')} [{anomaly.get('severity')}]\n"
     else:
         anomalies_text = "No anomalies detected"
 
+    combinations_text = ""
+    if combination_alerts:
+        for combo in combination_alerts:
+            combinations_text += f"- {combo['name']} [{combo['severity'].upper()}]: {combo['note']} (Parameters: {combo['parameters']})\n"
+    else:
+        combinations_text = "No combination alerts detected"
+
     return f"""You are a clinical monitoring assistant helping ICU doctors and nurses.
-Analyze the following patient data from the last monitoring window and write a short clinical report.
+Analyze the following patient data and write a structured clinical report.
 
 Patient MRN: {patient_mrn}
+Risk Score: {risk_score}/100 — {risk_level}
 
-VITALS SUMMARY (first → latest value, with trend):
+VITALS SUMMARY (first → latest, with trend):
 {vitals_text}
 
 ACTIVE ALARMS:
 {alarms_text}
 
-DETECTED ANOMALIES:
+SINGLE PARAMETER ANOMALIES:
 {anomalies_text}
+
+HIGH-RISK COMBINATION ALERTS:
+{combinations_text}
 
 Reply ONLY with this JSON — no extra text, no markdown:
 {{
-    "summary": "2-3 sentences about overall patient status in this window",
-    "concerns": "specific concerns needing attention, or None if stable",
-    "trend_assessment": "are things getting better, worse, or stable overall?"
+    "summary": "2-3 sentences about overall patient status including risk level",
+    "concerns": "write all concerns as one single paragraph separated by semicolons, not as a list or array", 
+    "trend_assessment": "are things getting better, worse, or stable? mention key trending parameters"
 }}
 
 Rules:
 - Do NOT suggest medications or treatments
 - Keep it short and clinical
-- Mention sensor disconnections if relevant
-- Focus on trends not just latest values"""
+- Prioritize combination alerts over single parameter issues
+- Mention risk score and level in summary
+- If sensors disconnected mention it"""
 
 
 async def generate_report(
     patient_mrn: str,
     vital_signs: list,
     alarms: list,
-    anomalies: dict
+    anomalies: dict,
+    combination_alerts: list,
+    risk_score: int,
+    risk_level: str
 ) -> dict:
 
     prompt = build_prompt(
         patient_mrn,
         vital_signs,
         alarms,
-        anomalies.get("anomalies", [])
+        anomalies.get("anomalies", []),
+        combination_alerts,
+        risk_score,
+        risk_level
     )
 
     start = time.time()
 
     try:
         response = await client.aio.models.generate_content(
-            model=MODEL,
-            contents=prompt
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=1000,
+            )
         )
         latency = round(time.time() - start, 2)
 
@@ -107,11 +127,12 @@ async def generate_report(
             if response_text.startswith("json"):
                 response_text = response_text[4:].strip()
 
+        print(f"🤖 Gemini raw response: {response_text}")
         result = json.loads(response_text)
 
         return {
             "summary": result.get("summary", "Unable to generate summary"),
-            "concerns": result.get("concerns", "None"),
+            "concerns": str(result.get("concerns", "None")) if isinstance(result.get("concerns"), list) else result.get("concerns", "None"),
             "trend_assessment": result.get("trend_assessment", "Unable to assess"),
             "model_used": MODEL,
             "prompt_version": PROMPT_VERSION,
