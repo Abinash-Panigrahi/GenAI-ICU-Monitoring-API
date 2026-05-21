@@ -10,7 +10,8 @@ async def fetch_patient_data(patient_mrn: str) -> dict:
     start_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     end_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.999Z")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        print(f"⏳ Fetching data for {patient_mrn}...")
         vital_signs, alarms = await asyncio.gather(
             client.get(
                 f"{settings.hardware_api_url}/api/history/{patient_mrn}",
@@ -21,6 +22,9 @@ async def fetch_patient_data(patient_mrn: str) -> dict:
                 params={"type": "alarms", "startDate": start_str, "endDate": end_str}
             )
         )
+        print(f"✅ Data fetched successfully!")
+        print(f"📊 Vital signs records: {len(vital_signs.json().get('data', {}).get('vital_signs', []))}")
+        print(f"🚨 Alarms records: {len(alarms.json().get('data', {}).get('alarms', []))}")
 
     vital_signs_data = vital_signs.json().get("data", {}).get("vital_signs", [])
     alarms_data = alarms.json().get("data", {}).get("alarms", [])

@@ -6,62 +6,73 @@ from app.config import settings
 client = genai.Client(api_key=settings.llm_api_key)
 
 PROMPT_VERSION = "v1.0"
-MODEL = "gemini-2.5-flash-preview-04-17"
+MODEL = "gemini-2.5-flash"
 
 def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: list) -> str:
-    
-    # format vitals into simple text
-    if vital_signs:
-        vitals_text = "\n".join(
-            f"- {v['parameterName']}: {v['value']} {v['unit']}"
-            for v in vital_signs
-        )
-    else:
-        vitals_text = "No valid vitals — all sensors may be disconnected"
 
-    # format alarms into simple text
+    vitals_text = ""
+    for vital in vital_signs:
+        param = vital.get("parameter")
+        unit = vital.get("unit", "")
+        status = vital.get("status")
+
+        if status == "sensor_disconnected":
+            vitals_text += f"- {param}: SENSOR DISCONNECTED entire window\n"
+        else:
+            first = vital.get("first_value")
+            latest = vital.get("latest_value")
+            avg = vital.get("average_value")
+            trend = vital.get("trend")
+            disconnected = vital.get("disconnected_readings", 0)
+            reconnected_at = vital.get("reconnected_at")
+
+            line = f"- {param}: first={first}{unit}, latest={latest}{unit}, avg={avg}{unit}, trend={trend}"
+
+            if disconnected > 0 and reconnected_at:
+                line += f" (was disconnected, reconnected at {reconnected_at})"
+
+            vitals_text += line + "\n"
+
+    alarms_text = ""
     if alarms:
-        alarms_text = "\n".join(
-            f"- {a['alarm_text']}"
-            for a in alarms
-        )
+        for alarm in alarms:
+            alarms_text += f"- {alarm.get('alarm_text')} ({alarm.get('alarm_type')})\n"
     else:
         alarms_text = "No active alarms"
 
-    # format anomalies into simple text
+    anomalies_text = ""
     if anomalies:
-        anomalies_text = "\n".join(
-            f"- {a['parameter']}: {a['issue']}"
-            for a in anomalies
-        )
+        for anomaly in anomalies:
+            anomalies_text += f"- {anomaly.get('parameter')}: {anomaly.get('issue')} [{anomaly.get('severity')}]\n"
     else:
         anomalies_text = "No anomalies detected"
 
-    return f"""You are helping ICU doctors and nurses monitor patients.
-Analyze the vitals below and write a short clinical report.
+    return f"""You are a clinical monitoring assistant helping ICU doctors and nurses.
+Analyze the following patient data from the last monitoring window and write a short clinical report.
 
-Patient: {patient_mrn}
+Patient MRN: {patient_mrn}
 
-VITALS:
+VITALS SUMMARY (first → latest value, with trend):
 {vitals_text}
 
-ALARMS:
+ACTIVE ALARMS:
 {alarms_text}
 
-DETECTED ISSUES:
+DETECTED ANOMALIES:
 {anomalies_text}
 
 Reply ONLY with this JSON — no extra text, no markdown:
 {{
-    "summary": "2-3 sentences about overall patient status",
-    "concerns": "list specific concerns or write None if patient is stable",
-    "trend_assessment": "are things getting better, worse, or stable?"
+    "summary": "2-3 sentences about overall patient status in this window",
+    "concerns": "specific concerns needing attention, or None if stable",
+    "trend_assessment": "are things getting better, worse, or stable overall?"
 }}
 
-Important:
+Rules:
 - Do NOT suggest medications or treatments
 - Keep it short and clinical
-- If sensors are disconnected, mention it clearly"""
+- Mention sensor disconnections if relevant
+- Focus on trends not just latest values"""
 
 
 async def generate_report(

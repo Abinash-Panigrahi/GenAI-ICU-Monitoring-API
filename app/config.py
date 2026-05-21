@@ -1,4 +1,3 @@
-# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -9,5 +8,8 @@ class Settings(BaseSettings):
     llm_api_key: str
     app_env: str = "development"
     debug: bool = True
+    use_test_date: bool = False
+    test_start_date: str = ""
+    test_end_date: str = ""
 
 settings = Settings()
