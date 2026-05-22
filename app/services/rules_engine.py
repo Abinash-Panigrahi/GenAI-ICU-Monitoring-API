@@ -247,14 +247,18 @@ def analyze_vitals(vital_signs: list, alarms: list) -> dict:
     # step 2 — combination checks
     combination_alerts = check_combinations(vital_signs)
 
-    # step 3 — alarm checks
+    # step 3 — alarm checks (deduplicated)
+    seen_alarms = set()
     for alarm in alarms:
-        anomalies.append({
-            "parameter": alarm.get("alarm_type"),
-            "issue": alarm.get("alarm_text"),
-            "severity": "warning",
-            "type": "alarm"
-        })
+        alarm_key = alarm.get("alarm_text")
+        if alarm_key not in seen_alarms:
+            seen_alarms.add(alarm_key)
+            anomalies.append({
+                "parameter": alarm.get("alarm_type"),
+                "issue": alarm.get("alarm_text"),
+                "severity": "warning",
+                "type": "alarm"
+            })
 
     # step 4 — overall severity
     severity = "normal"

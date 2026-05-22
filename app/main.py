@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import engine, get_db
 from app.services.report_generator import process_patient
+from app.api.routes import reports, patients
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,6 +23,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+app.include_router(reports.router)
+app.include_router(patients.router)
 
 @app.get("/")
 async def root():

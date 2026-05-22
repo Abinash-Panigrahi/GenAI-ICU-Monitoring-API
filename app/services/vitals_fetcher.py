@@ -21,19 +21,19 @@ async def fetch_patient_data(patient_mrn: str) -> dict:
         print(f"⏳ Fetching data for {patient_mrn}...")
         vital_signs, alarms = await asyncio.gather(
             client.get(
-                f"{settings.hardware_api_url}/api/history/{patient_mrn}",
-                params={"type": "vital_signs", "startDate": start_str, "endDate": end_str}
+                f"{settings.hardware_api_url}/api/vitals/{patient_mrn}/history",
+                params={"type": "vitals", "startDate": start_str, "endDate": end_str}
             ),
             client.get(
-                f"{settings.hardware_api_url}/api/history/{patient_mrn}",
+                f"{settings.hardware_api_url}/api/vitals/{patient_mrn}/history",
                 params={"type": "alarms", "startDate": start_str, "endDate": end_str}
             )
         )
         print(f"✅ Data fetched successfully!")
-        print(f"📊 Vital signs records: {len(vital_signs.json().get('data', {}).get('vital_signs', []))}")
+        print(f"📊 Vital signs records: {len(vital_signs.json().get('data', {}).get('vitals', []))}")
         print(f"🚨 Alarms records: {len(alarms.json().get('data', {}).get('alarms', []))}")
 
-    vital_signs_data = vital_signs.json().get("data", {}).get("vital_signs", [])
+    vital_signs_data = vital_signs.json().get("data", {}).get("vitals", [])
     alarms_data = alarms.json().get("data", {}).get("alarms", [])
     alarms_data = alarms_data[-20:]
 

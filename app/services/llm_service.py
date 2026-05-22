@@ -113,7 +113,7 @@ async def generate_report(
                 contents=prompt,
                 config=types.GenerateContentConfig(
                 temperature=0.2,
-                max_output_tokens=1000,
+                max_output_tokens=2000,
             )
         )
         latency = round(time.time() - start, 2)
