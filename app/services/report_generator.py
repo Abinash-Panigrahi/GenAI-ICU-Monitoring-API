@@ -5,6 +5,8 @@ from app.models.report import Report
 from app.services.vitals_fetcher import fetch_patient_data
 from app.services.rules_engine import analyze_vitals
 from app.services.llm_service import generate_report
+from tests.mock_data import MOCK_PATIENTS
+
 
 async def process_patient(patient_mrn: str, db: AsyncSession):
     
@@ -15,6 +17,11 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
     alarms = raw_data["alarms"]
     window_start = raw_data["window_start"]
     window_end = raw_data["window_end"]
+
+    # --- CLEAN TEST HOOK ---
+    if patient_mrn in MOCK_PATIENTS:
+        print(f"⚠️ INJECTING MOCK DATA FOR: {patient_mrn}")
+        vital_signs = MOCK_PATIENTS[patient_mrn]
 
     # step 2 — save raw vitals to database
     vitals_record = Vitals(
@@ -38,7 +45,9 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         anomalies=anomalies,
         combination_alerts=anomalies["combination_alerts"],
         risk_score=anomalies["risk_score"],
-        risk_level=anomalies["risk_level"]
+        risk_level=anomalies["risk_level"],
+        mews_score=anomalies["mews_score"],
+        qsofa_score=anomalies["qsofa_score"]
     )
 
     # step 5 — save report to database
@@ -51,6 +60,13 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         risk_score=anomalies["risk_score"],
         risk_level=anomalies["risk_level"],
         combination_alerts=anomalies["combination_alerts"],
+        
+        # --- NEW MEDICAL DATA STORED HERE ---
+        mews_score=anomalies["mews_score"],
+        qsofa_score=anomalies["qsofa_score"],
+        organ_system_summary=vital_signs,
+        # ------------------------------------
+        
         summary=llm_output["summary"],
         concerns=llm_output["concerns"],
         trend_assessment=llm_output["trend_assessment"],

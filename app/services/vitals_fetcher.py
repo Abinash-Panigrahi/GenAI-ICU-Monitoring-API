@@ -48,9 +48,33 @@ async def fetch_patient_data(patient_mrn: str) -> dict:
     }
 
 
-def summarize_vitals(vital_signs_data: list) -> list:
-    grouped = {}
+def summarize_vitals(vital_signs_data: list) -> dict:
+    # 1. Add this map to group parameters by organ system
+    organ_map = {
+        "SpO2": "Respiratory",
+        "RR": "Respiratory",
+        "HR": "Cardiovascular",
+        "PR": "Cardiovascular",
+        "PI": "Cardiovascular",
+        "NIBP-S": "Cardiovascular",
+        "NIBP-D": "Cardiovascular",
+        "NIBP-M": "Cardiovascular",
+        "GCS-Total": "Neurological",
+        "GCS-Eye": "Neurological",
+        "GCS-Motor": "Neurological",
+        "GCS-Verbal": "Neurological"
+    }
 
+    # 2. Change the summary from a flat list [] to a categorized dictionary
+    summary = {
+        "Respiratory": [],
+        "Cardiovascular": [],
+        "Neurological": [],
+        "Other": []
+    }
+    
+    grouped = {}
+    
     for record in vital_signs_data:
         for vital in record.get("vitals_json", []):
             name = vital.get("parameterName")
@@ -71,7 +95,6 @@ def summarize_vitals(vital_signs_data: list) -> list:
                 "time": obs_time
             })
 
-    summary = []
 
     for param_name, param_data in grouped.items():
         readings = param_data["readings"]
@@ -83,18 +106,31 @@ def summarize_vitals(vital_signs_data: list) -> list:
         disconnected_count = len(invalid)
         connected_count = len(valid)
 
+        # 3. Match the parameter to its organ system
+        system_category = organ_map.get(param_name, "Other")
+
+        # 4. Track Exact Disconnection Start & End Times
+        disconnection_periods = []
+        if disconnected_count > 0:
+            is_disconnected = False
+            start_time = None
+            for r in readings:
+                if r["value"] == -1 and not is_disconnected:
+                    start_time = r["time"]
+                    is_disconnected = True
+                elif r["value"] != -1 and is_disconnected:
+                    disconnection_periods.append({"start": start_time, "end": r["time"]})
+                    is_disconnected = False
+            if is_disconnected:
+                disconnection_periods.append({"start": start_time, "end": "ongoing"})
+
         if connected_count == 0:
-            summary.append({
+            summary[system_category].append({
                 "parameter": param_name,
-                "unit": unit,
                 "status": "sensor_disconnected",
                 "disconnected_readings": disconnected_count,
-                "valid_readings": 0,
-                "first_value": None,
-                "latest_value": None,
-                "average_value": None,
-                "trend": None,
-                "reconnected_at": None
+                "disconnection_periods": disconnection_periods,
+                "valid_readings": 0
             })
         else:
             values = [r["value"] for r in valid]
@@ -102,34 +138,37 @@ def summarize_vitals(vital_signs_data: list) -> list:
             latest_value = values[-1]
             average_value = round(sum(values) / len(values), 2)
 
-            if len(values) >= 2:
-                if latest_value > first_value * 1.05:
-                    trend = "INCREASING"
-                elif latest_value < first_value * 0.95:
-                    trend = "DECREASING"
-                else:
-                    trend = "STABLE"
+            # 5. Velocity: (Difference between latest and first) / 15 minutes
+            velocity_per_min = round((latest_value - first_value) / 15, 2)
+
+            if latest_value > first_value * 1.05:
+                trend = "INCREASING"
+            elif latest_value < first_value * 0.95:
+                trend = "DECREASING"
             else:
                 trend = "STABLE"
 
-            reconnected_at = None
-            if disconnected_count > 0:
-                for r in readings:
-                    if r["value"] != -1:
-                        reconnected_at = r["time"]
-                        break
+            # 6. Time-in-Range: Count bad readings and multiply by 5 seconds
+            time_below_threshold_sec = 0
+            if param_name == "SpO2":
+                time_below_threshold_sec = len([v for v in values if v < 90]) * 5
+            elif param_name == "NIBP-S":
+                time_below_threshold_sec = len([v for v in values if v < 90]) * 5
 
-            summary.append({
+            # Save the final block into the correct organ system list
+            summary[system_category].append({
                 "parameter": param_name,
                 "unit": unit,
                 "status": "connected",
-                "disconnected_readings": disconnected_count,
                 "valid_readings": connected_count,
                 "first_value": first_value,
                 "latest_value": latest_value,
                 "average_value": average_value,
                 "trend": trend,
-                "reconnected_at": reconnected_at
+                "velocity_per_min": velocity_per_min,
+                "time_below_threshold_sec": time_below_threshold_sec,
+                "disconnected_readings": disconnected_count,
+                "disconnection_periods": disconnection_periods
             })
 
     return summary

@@ -36,7 +36,9 @@ async def health():
     return {
         "status": "ok",
         "environment": settings.app_env,
-        "debug": settings.debug
+        "debug": settings.debug,
+        "use_test_date": settings.use_test_date,
+        "test_start_date": settings.test_start_date
     }
 
 @app.get("/test/{patient_mrn}")

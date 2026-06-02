@@ -9,27 +9,36 @@ client = genai.Client(api_key=settings.llm_api_key)
 PROMPT_VERSION = "v1.0"
 MODEL = "gemini-2.5-flash"
 
-def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: list, combination_alerts: list, risk_score: int, risk_level: str) -> str:
+def build_prompt(patient_mrn: str, vital_signs: dict, alarms: list, anomalies: list, combination_alerts: list, risk_score: int, risk_level: str, mews_score: int, qsofa_score: int) -> str:
 
     vitals_text = ""
-    for vital in vital_signs:
-        param = vital.get("parameter")
-        unit = vital.get("unit", "")
-        status = vital.get("status")
+    # Loop through the new grouped dictionary
+    for system, params in vital_signs.items():
+        if not params: continue
+        vitals_text += f"\n--- {system.upper()} ---\n"
+        for vital in params:
+            param = vital.get("parameter")
+            unit = vital.get("unit", "")
+            status = vital.get("status")
 
-        if status == "sensor_disconnected":
-            vitals_text += f"- {param}: SENSOR DISCONNECTED entire window\n"
-        else:
-            first = vital.get("first_value")
-            latest = vital.get("latest_value")
-            avg = vital.get("average_value")
-            trend = vital.get("trend")
-            disconnected = vital.get("disconnected_readings", 0)
-            reconnected_at = vital.get("reconnected_at")
-            line = f"- {param}: first={first}{unit}, latest={latest}{unit}, avg={avg}{unit}, trend={trend}"
-            if disconnected > 0 and reconnected_at:
-                line += f" (was disconnected, reconnected at {reconnected_at})"
-            vitals_text += line + "\n"
+            if status == "sensor_disconnected":
+                vitals_text += f"- {param}: SENSOR DISCONNECTED entire window\n"
+            else:
+                latest = vital.get("latest_value")
+                avg = vital.get("average_value")
+                trend = vital.get("trend")
+                velocity = vital.get("velocity_per_min", 0)
+                time_below = vital.get("time_below_threshold_sec", 0)
+                
+                line = f"- {param}: {latest}{unit} (Avg: {avg}{unit}, Trend: {trend}, Velocity: {velocity}/min)"
+                
+                if time_below > 0:
+                    line += f" [⚠️ TIME-IN-RANGE ALERT: Spent {time_below} seconds below safe threshold!]"
+                
+                disconnected = vital.get("disconnected_readings", 0)
+                if disconnected > 0:
+                    line += f" (Sensor disconnected {disconnected} times)"
+                vitals_text += line + "\n"
 
     alarms_text = ""
     if alarms:
@@ -52,13 +61,15 @@ def build_prompt(patient_mrn: str, vital_signs: list, alarms: list, anomalies: l
     else:
         combinations_text = "No combination alerts detected"
 
-    return f"""You are a clinical monitoring assistant helping ICU doctors and nurses.
-Analyze the following patient data and write a structured clinical report.
+    return f"""You are an expert ICU attending physician analyzing 15-minute window telemetry data.
+Write a highly concise, doctor-grade clinical summary.
 
 Patient MRN: {patient_mrn}
 Risk Score: {risk_score}/100 — {risk_level}
+MEWS Score: {mews_score}
+qSOFA Score: {qsofa_score}
 
-VITALS SUMMARY (first → latest, with trend):
+ORGAN SYSTEM TELEMETRY (with Time-in-Range and Velocity):
 {vitals_text}
 
 ACTIVE ALARMS:
@@ -72,27 +83,28 @@ HIGH-RISK COMBINATION ALERTS:
 
 Reply ONLY with this JSON — no extra text, no markdown:
 {{
-    "summary": "2-3 sentences about overall patient status including risk level",
+    "summary": "2-3 sentences about overall patient status. Mention MEWS/qSOFA scores and exact Time-in-Range alerts if applicable.",
     "concerns": "write all concerns as one single paragraph separated by semicolons, not as a list or array", 
-    "trend_assessment": "are things getting better, worse, or stable? mention key trending parameters"
+    "trend_assessment": "are things getting better, worse, or stable? mention key trending parameters and velocities"
 }}
 
 Rules:
 - Do NOT suggest medications or treatments
 - Keep it short and clinical
-- Prioritize combination alerts over single parameter issues
-- Mention risk score and level in summary
+- Prioritize combination alerts and Time-in-Range warnings
 - If sensors disconnected mention it"""
 
 
 async def generate_report(
     patient_mrn: str,
-    vital_signs: list,
+    vital_signs: dict,  # <-- Changed to dict
     alarms: list,
     anomalies: dict,
     combination_alerts: list,
     risk_score: int,
-    risk_level: str
+    risk_level: str,
+    mews_score: int,    # <-- Added
+    qsofa_score: int    # <-- Added
 ) -> dict:
 
     prompt = build_prompt(
@@ -102,7 +114,9 @@ async def generate_report(
         anomalies.get("anomalies", []),
         combination_alerts,
         risk_score,
-        risk_level
+        risk_level,
+        mews_score,     # <-- Added
+        qsofa_score     # <-- Added
     )
 
     start = time.time()

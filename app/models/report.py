@@ -17,6 +17,9 @@ class Report(Base):
     risk_score = Column(Float, nullable=True)
     risk_level = Column(String, nullable=True)
     combination_alerts = Column(JSON, nullable=True)
+    mews_score = Column(Integer, nullable=True)
+    qsofa_score = Column(Integer, nullable=True)
+    organ_system_summary = Column(JSON, nullable=True)
     
     # llm output
     summary = Column(Text, nullable=True)

@@ -239,13 +239,18 @@ def calculate_risk_score(anomalies: list, combination_alerts: list) -> dict:
     }
 
 
-def analyze_vitals(vital_signs: list, alarms: list) -> dict:
+def analyze_vitals(vital_signs: dict, alarms: list) -> dict:
 
-    # step 1 — single parameter checks
-    anomalies = check_single_parameters(vital_signs)
+    # 1. Flatten the new dictionary structure so the old rules still work perfectly
+    flat_vitals = []
+    for system, params in vital_signs.items():
+        flat_vitals.extend(params)
 
-    # step 2 — combination checks
-    combination_alerts = check_combinations(vital_signs)
+    # step 1 — single parameter checks (using flattened list)
+    anomalies = check_single_parameters(flat_vitals)
+
+    # step 2 — combination checks (using flattened list)
+    combination_alerts = check_combinations(flat_vitals)
 
     # step 3 — alarm checks (deduplicated)
     seen_alarms = set()
@@ -274,10 +279,88 @@ def analyze_vitals(vital_signs: list, alarms: list) -> dict:
     # step 5 — risk score
     risk = calculate_risk_score(anomalies, combination_alerts)
 
+    # NEW: Calculate our Medical Scores using the grouped dictionary!
+    mews = calculate_mews(vital_signs)
+    qsofa = calculate_qsofa(vital_signs)
+
     return {
         "anomalies": anomalies,
         "combination_alerts": combination_alerts,
         "severity": severity,
         "risk_score": risk["risk_score"],
-        "risk_level": risk["risk_level"]
+        "risk_level": risk["risk_level"],
+        "mews_score": mews,
+        "qsofa_score": qsofa
     }
+
+def calculate_qsofa(vitals_summary: dict) -> int:
+    """Calculates qSOFA score (0-3) based on RR, NIBP-S, and GCS."""
+    score = 0
+    
+    # Safely extract latest values
+    rr = 0
+    for v in vitals_summary.get("Respiratory", []):
+        if v["parameter"] == "RR":
+            rr = v.get("latest_value", 0)
+            
+    sbp = 0
+    for v in vitals_summary.get("Cardiovascular", []):
+        if v["parameter"] == "NIBP-S":
+            sbp = v.get("latest_value", 0)
+
+    gcs = 15 # Default to normal if missing
+    for v in vitals_summary.get("Neurological", []):
+        if v["parameter"] == "GCS-Total":
+            gcs = v.get("latest_value", 15)
+
+    # qSOFA Scoring Logic
+    if rr >= 22:
+        score += 1
+    if sbp > 0 and sbp <= 100:
+        score += 1
+    if gcs < 15:
+        score += 1
+        
+    return score
+
+def calculate_mews(vitals_summary: dict) -> int:
+    """Calculates MEWS score based on HR, RR, NIBP-S, and GCS."""
+    score = 0
+    
+    # Respiratory Scoring
+    for v in vitals_summary.get("Respiratory", []):
+        if v["parameter"] == "RR":
+            rr = v.get("latest_value", 0)
+            if rr > 0:
+                if rr < 9: score += 2
+                elif 15 <= rr <= 20: score += 1
+                elif 21 <= rr <= 29: score += 2
+                elif rr >= 30: score += 3
+
+    # Cardiovascular Scoring
+    for v in vitals_summary.get("Cardiovascular", []):
+        if v["parameter"] == "NIBP-S":
+            sbp = v.get("latest_value", 0)
+            if sbp > 0:
+                if sbp <= 70: score += 3
+                elif 71 <= sbp <= 80: score += 2
+                elif 81 <= sbp <= 100: score += 1
+                elif sbp >= 200: score += 2
+        elif v["parameter"] == "HR":
+            hr = v.get("latest_value", 0)
+            if hr > 0:
+                if hr < 40: score += 2
+                elif 41 <= hr <= 50: score += 1
+                elif 101 <= hr <= 110: score += 1
+                elif 111 <= hr <= 129: score += 2
+                elif hr >= 130: score += 3
+                
+    # Neurological Scoring
+    for v in vitals_summary.get("Neurological", []):
+        if v["parameter"] == "GCS-Total":
+            gcs = v.get("latest_value", 15)
+            if gcs == 13 or gcs == 14: score += 1
+            elif 9 <= gcs <= 12: score += 2
+            elif gcs < 9: score += 3
+
+    return score
