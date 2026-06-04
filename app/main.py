@@ -5,6 +5,8 @@ from app.config import settings
 from app.database import engine, get_db
 from app.services.report_generator import process_patient
 from app.api.routes import reports, patients
+from app.api.routes import reports, patients
+from scheduler.jobs import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -12,8 +14,10 @@ async def lifespan(app: FastAPI):
     # startup
     async with engine.begin() as conn:
         print("✅ Database connected successfully")
+    start_scheduler()
     yield
     # shutdown
+    stop_scheduler()
     await engine.dispose()
     print("Database disconnected")
 

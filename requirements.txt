@@ -6,3 +6,4 @@ asyncpg
 alembic
 httpx
 google-genai
+apscheduler

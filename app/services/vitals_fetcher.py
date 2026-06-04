@@ -113,16 +113,16 @@ def summarize_vitals(vital_signs_data: list) -> dict:
         disconnection_periods = []
         if disconnected_count > 0:
             is_disconnected = False
-            start_time = None
+            disc_start = None  # ✅ FIXED
             for r in readings:
                 if r["value"] == -1 and not is_disconnected:
-                    start_time = r["time"]
+                    disc_start = r["time"]  # ✅ FIXED
                     is_disconnected = True
                 elif r["value"] != -1 and is_disconnected:
-                    disconnection_periods.append({"start": start_time, "end": r["time"]})
+                    disconnection_periods.append({"start": disc_start, "end": r["time"]}) # ✅ FIXED
                     is_disconnected = False
             if is_disconnected:
-                disconnection_periods.append({"start": start_time, "end": "ongoing"})
+                disconnection_periods.append({"start": disc_start, "end": "ongoing"}) # ✅ FIXED
 
         if connected_count == 0:
             summary[system_category].append({
