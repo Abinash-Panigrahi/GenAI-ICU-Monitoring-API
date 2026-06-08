@@ -7,6 +7,7 @@ from app.services.report_generator import process_patient
 from app.api.routes import reports, patients
 from app.api.routes import reports, patients
 from scheduler.jobs import start_scheduler, stop_scheduler
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
@@ -26,6 +27,14 @@ app = FastAPI(
     description="AI-powered ICU patient monitoring system",
     version="1.0.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all frontend domains to connect
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows GET, POST, and the tricky OPTIONS method!
+    allow_headers=["*"],
 )
 
 app.include_router(reports.router)

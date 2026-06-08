@@ -31,7 +31,7 @@ async def run_monitoring_cycle():
 def start_scheduler():
     scheduler.add_job(
         run_monitoring_cycle,
-        trigger=IntervalTrigger(minutes=15),
+        trigger=IntervalTrigger(minutes=30),
         id="monitoring_cycle",
         replace_existing=True
     )

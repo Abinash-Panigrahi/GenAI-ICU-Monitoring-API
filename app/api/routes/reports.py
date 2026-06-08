@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from app.database import get_db
 from app.models.report import Report
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+# ==========================================
+# 1. GET LATEST REPORT (Unchanged)
+# ==========================================
 @router.get("/{patient_mrn}")
 async def get_latest_report(patient_mrn: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -34,23 +39,53 @@ async def get_latest_report(patient_mrn: str, db: AsyncSession = Depends(get_db)
         "llm_latency_seconds": report.llm_latency_seconds
     }
 
+# ==========================================
+# 2. GET REPORT HISTORY (Updated with Pagination & Time Filter)
+# ==========================================
 @router.get("/{patient_mrn}/history")
-async def get_report_history(patient_mrn: str, limit: int = 10, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Report)
-        .where(Report.patient_mrn == patient_mrn)
-        .order_by(desc(Report.generated_at))
+async def get_report_history(
+    patient_mrn: str,
+    start_time: Optional[datetime] = None, # NEW
+    end_time: Optional[datetime] = None,   # NEW
+    page: int = Query(1, ge=1),
+    limit: int = Query(5, ge=1, le=50),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Build dynamic filters
+    filters = [Report.patient_mrn == patient_mrn]
+    
+    # 2. Add Range Filters (The Magic)
+    if start_time:
+        filters.append(Report.generated_at >= start_time) # Greater than or equal to start
+    if end_time:
+        filters.append(Report.generated_at <= end_time)   # Less than or equal to end
+        
+    # 3. Count total records matching our filters
+    count_query = select(func.count()).where(*filters)
+    total_records = (await db.execute(count_query)).scalar()
+    
+    if total_records == 0:
+        raise HTTPException(status_code=404, detail=f"No reports found for patient {patient_mrn} in this time range.")
+    
+    # 4. Apply pagination math
+    offset = (page - 1) * limit
+    query = select(Report).where(*filters)\
+        .order_by(desc(Report.generated_at))\
+        .offset(offset)\
         .limit(limit)
-    )
+        
+    result = await db.execute(query)
     reports = result.scalars().all()
-
-    if not reports:
-        raise HTTPException(status_code=404, detail=f"No reports found for patient {patient_mrn}")
+    
+    total_pages = (total_records + limit - 1) // limit
 
     return {
         "patient_mrn": patient_mrn,
-        "total": len(reports),
-        "reports": [
+        "total_records": total_records,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "data": [
             {
                 "id": r.id,
                 "generated_at": r.generated_at,
