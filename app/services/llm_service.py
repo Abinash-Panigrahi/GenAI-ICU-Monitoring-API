@@ -10,7 +10,6 @@ client = genai.Client(api_key=settings.llm_api_key)
 PROMPT_VERSION = "v1.0"
 MODEL = "gemini-2.5-flash"
 
-# --- CHANGE 2: Added this function to stop retrying if we get a 400 Error ---
 def should_retry_error(exception):
     # If the error string contains '400', stop immediately!
     if "400" in str(exception):
@@ -99,18 +98,35 @@ Reply ONLY with this JSON — no extra text, no markdown:
             "severity": "warning or critical"
         }}
     ], 
+
+    "highlight_vitals": ["array", "of", "strings"],
     
-    "trend_assessment": "Are things getting better, worse, or stable? Mention key trending parameters. If vital signs arrays are empty, explain WHY based on the technical alarms (e.g., 'Unable to assess trend due to persistent sensor disconnections'). If physiological alarms exist despite missing vitals, use them to infer the trend."
+    "trend_assessment": "Are things getting better, worse, or stable? Mention key trending parameters."
 }}
 
 Rules:
 - Do NOT suggest medications or treatments
 - Keep it short and clinical
 - Prioritize combination alerts and Time-in-Range warnings
-- If sensors disconnected mention it"""
+- If sensors disconnected mention it
 
+CRITICAL REQUIREMENT FOR 'highlight_vitals' ARRAY:
+Analyze all data. If ANY abnormality, concern, or alert exists for a vital sign, you MUST add its exact string identifier to the 'highlight_vitals' array. 
+This array tells the frontend UI which boxes to flash red.
+You are restricted to using ONLY these exact strings in the array: "hr", "spo2", "bp", "rr", "temp", "systemic".
 
-# --- CHANGE 4: Added the retry_if_exception logic to the decorator ---
+Example Expected Output:
+{{
+  "summary": "Patient is hypoxemic and tachycardic.",
+  "concerns": [
+      {{"issue": "SpO2 critically low", "category": "physiological", "severity": "extreme"}},
+      {{"issue": "Tachycardia present", "category": "physiological", "severity": "warning"}}
+  ],
+  "highlight_vitals": ["spo2", "hr"],
+  "trend_assessment": "Patient is deteriorating rapidly."
+}}
+"""
+
 @retry(
     wait=wait_random_exponential(multiplier=2, max=40), 
     stop=stop_after_attempt(5),
@@ -127,8 +143,6 @@ async def call_gemini_api(prompt: str):
         )
     )
 
-
-# 2. MAIN CORE FUNCTION: Handles data parsing and the final fallback
 async def generate_report(
     patient_mrn: str,
     vital_signs: dict,  
@@ -170,9 +184,10 @@ async def generate_report(
 
         return {
             "summary": result.get("summary", "Unable to generate summary"),
-            
-            # --- THIS IS THE CRITICAL CHANGE RIGHT HERE ---
             "concerns": result.get("concerns", []),
+            
+            # 👇 THIS IS WHAT WAS MISSING 👇
+            "highlight_vitals": result.get("highlight_vitals", []), 
             
             "trend_assessment": result.get("trend_assessment", "Unable to assess"),
             "model_used": MODEL,
@@ -183,7 +198,11 @@ async def generate_report(
     except json.JSONDecodeError:
         return {
             "summary": "Report generation failed — AI response was not in expected format",
-            "concerns": [], # Changed to empty list for safety
+            "concerns": [], 
+            
+            # 👇 ADDED HERE TOO 👇
+            "highlight_vitals": [], 
+            
             "trend_assessment": "Unable to assess",
             "model_used": MODEL,
             "prompt_version": PROMPT_VERSION,
@@ -193,7 +212,13 @@ async def generate_report(
     except Exception as e:
         return {
             "summary": f"Report generation failed — System Outage ({str(e)})",
-            "concerns": [{"issue": "System Error", "category": "technical", "severity": "critical"}], # Changed to mock list for safety
+            
+            # 👇 REMOVED target_parameter from here 👇
+            "concerns": [{"issue": "System Error", "category": "technical", "severity": "critical"}], 
+            
+            # 👇 ADDED HERE TOO 👇
+            "highlight_vitals": ["systemic"], 
+            
             "trend_assessment": "Unable to assess due to system error",
             "model_used": MODEL,
             "prompt_version": PROMPT_VERSION,

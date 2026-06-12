@@ -10,7 +10,11 @@ class ReportResponse(BaseModel):
     window_end: datetime
     severity_level: Optional[str]
     summary: Optional[str]
-    concerns: Optional[str]
+    concerns: Optional[str] 
+    
+    # 👇 ADD THIS LINE 👇
+    highlight_vitals: Optional[list] = []
+    
     trend_assessment: Optional[str]
     model_used: Optional[str]
     anomalies_found: Optional[list]

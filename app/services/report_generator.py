@@ -52,6 +52,7 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
     )
 
     # step 5 — save report to database
+    # step 5 — save report to database
     report = Report(
         patient_mrn=patient_mrn,
         window_start=window_start,
@@ -72,6 +73,9 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         
         # <--- 2. ADD json.dumps() RIGHT HERE --->
         concerns=json.dumps(llm_output["concerns"]), 
+        
+        # 👇 ADD THIS EXACT LINE RIGHT HERE 👇
+        highlight_vitals=json.dumps(llm_output.get("highlight_vitals", [])), 
         
         trend_assessment=llm_output["trend_assessment"],
         model_used=llm_output["model_used"],

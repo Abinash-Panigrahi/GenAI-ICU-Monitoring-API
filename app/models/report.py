@@ -24,6 +24,9 @@ class Report(Base):
     # llm output
     summary = Column(Text, nullable=True)
     concerns = Column(Text, nullable=True)
+    
+    highlight_vitals = Column(Text, nullable=True) 
+    
     trend_assessment = Column(Text, nullable=True)
     
     # metadata

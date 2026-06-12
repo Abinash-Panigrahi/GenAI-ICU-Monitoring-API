@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,7 +10,7 @@ from app.models.report import Report
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 # ==========================================
-# 1. GET LATEST REPORT (Unchanged)
+# 1. GET LATEST REPORT
 # ==========================================
 @router.get("/{patient_mrn}")
 async def get_latest_report(patient_mrn: str, db: AsyncSession = Depends(get_db)):
@@ -31,7 +32,8 @@ async def get_latest_report(patient_mrn: str, db: AsyncSession = Depends(get_db)
         "risk_level": report.risk_level,
         "severity": report.severity_level,
         "summary": report.summary,
-        "concerns": report.concerns,
+        "concerns": json.loads(report.concerns) if report.concerns else [],
+        "highlight_vitals": json.loads(report.highlight_vitals) if report.highlight_vitals else [],
         "trend_assessment": report.trend_assessment,
         "combination_alerts": report.combination_alerts,
         "anomalies_found": report.anomalies_found,
@@ -40,13 +42,13 @@ async def get_latest_report(patient_mrn: str, db: AsyncSession = Depends(get_db)
     }
 
 # ==========================================
-# 2. GET REPORT HISTORY (Updated with Pagination & Time Filter)
+# 2. GET REPORT HISTORY (With Pagination & Time Filter)
 # ==========================================
 @router.get("/{patient_mrn}/history")
 async def get_report_history(
     patient_mrn: str,
-    start_time: Optional[datetime] = None, # NEW
-    end_time: Optional[datetime] = None,   # NEW
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(5, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
@@ -54,11 +56,11 @@ async def get_report_history(
     # 1. Build dynamic filters
     filters = [Report.patient_mrn == patient_mrn]
     
-    # 2. Add Range Filters (The Magic)
+    # 2. Add Range Filters
     if start_time:
-        filters.append(Report.generated_at >= start_time) # Greater than or equal to start
+        filters.append(Report.generated_at >= start_time) 
     if end_time:
-        filters.append(Report.generated_at <= end_time)   # Less than or equal to end
+        filters.append(Report.generated_at <= end_time)   
         
     # 3. Count total records matching our filters
     count_query = select(func.count()).where(*filters)
@@ -93,7 +95,8 @@ async def get_report_history(
                 "risk_level": r.risk_level,
                 "severity": r.severity_level,
                 "summary": r.summary,
-                "concerns": r.concerns,
+                "concerns": json.loads(r.concerns) if r.concerns else [],
+                "highlight_vitals": json.loads(r.highlight_vitals) if r.highlight_vitals else [],
                 "trend_assessment": r.trend_assessment,
             }
             for r in reports
