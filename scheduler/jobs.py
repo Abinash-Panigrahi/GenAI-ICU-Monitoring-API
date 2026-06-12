@@ -5,6 +5,7 @@ from app.database import AsyncSessionLocal
 from app.services.report_generator import process_patient
 from app.models.patient import Patient
 from sqlalchemy import select
+import asyncio
 
 scheduler = AsyncIOScheduler()
 
@@ -25,8 +26,12 @@ async def run_monitoring_cycle():
                 print(f"🔄 Processing patient {patient.patient_mrn}...")
                 await process_patient(patient.patient_mrn, db)
                 print(f"✅ Report generated for {patient.patient_mrn}")
+            except asyncio.TimeoutError:
+                print(f"❌ Failed for {patient.patient_mrn}: Network Timeout (Hardware API or Gemini took too long)")
+            
             except Exception as e:
-                print(f"❌ Failed for {patient.patient_mrn}: {str(e)}")
+                error_msg = str(e) if str(e) else repr(e)
+                print(f"❌ Failed for {patient.patient_mrn}: {error_msg}")
 
 def start_scheduler():
     scheduler.add_job(

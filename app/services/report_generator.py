@@ -1,3 +1,4 @@
+import json  # <--- 1. ADD THIS IMPORT AT THE TOP
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.vitals import Vitals
@@ -68,7 +69,10 @@ async def process_patient(patient_mrn: str, db: AsyncSession):
         # ------------------------------------
         
         summary=llm_output["summary"],
-        concerns=llm_output["concerns"],
+        
+        # <--- 2. ADD json.dumps() RIGHT HERE --->
+        concerns=json.dumps(llm_output["concerns"]), 
+        
         trend_assessment=llm_output["trend_assessment"],
         model_used=llm_output["model_used"],
         prompt_version=llm_output["prompt_version"],
